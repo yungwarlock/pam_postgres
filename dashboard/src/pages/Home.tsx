@@ -13,15 +13,15 @@ const Home = (): React.ReactElement => {
       </div>
 
       <div className="grid grid-cols-3 gap-8 px-4 py-12 max-w-5xl mx-auto">
-        <div className="flex flex-col justify-center items-center bg-gray-50 rounded-lg p-6 h-48">
+        <div className="flex flex-col justify-center items-center bg-gray-50 border border-gray-200 rounded-lg p-6 h-48">
           <h3 className="text-xl font-semibold mb-2">Principle of Least Privilege</h3>
           <p className="text-slate-500 text-center">Grant only the minimum access necessary for your operations</p>
         </div>
-        <div className="flex flex-col justify-center items-center bg-gray-50 rounded-lg p-6">
+        <div className="flex flex-col justify-center items-center bg-gray-50 border border-gray-200 rounded-lg p-6">
           <h3 className="text-xl font-semibold mb-2">Time-Constrained Access</h3>
           <p className="text-slate-500 text-center">Automatically revoke elevated privileges after a set duration</p>
         </div>
-        <div className="flex flex-col justify-center items-center bg-gray-50 rounded-lg p-6">
+        <div className="flex flex-col justify-center items-center bg-gray-50 border border-gray-200 rounded-lg p-6">
           <h3 className="text-xl font-semibold mb-2">Verified & Secure</h3>
           <p className="text-slate-500 text-center">Reduce vulnerability surface area with secure access controls</p>
         </div>

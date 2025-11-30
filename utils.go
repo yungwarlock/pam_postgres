@@ -1,12 +1,23 @@
 package main
 
 import (
+	"database/sql"
 	"io/fs"
 	"log"
 	"net/http"
 	"path/filepath"
 	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
+
+func setupDB(url string) *sql.DB {
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	return db
+}
 
 // loggerMiddleware logs HTTP requests with method, URL, status code, and duration
 func loggerMiddleware(next http.Handler) http.Handler {

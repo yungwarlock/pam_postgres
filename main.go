@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 
+	requestaccess "pam_postgres/services/request_access"
 	"pam_postgres/services/security"
 )
 
 var (
-	Port  = os.Getenv("PORT")
-	Debug = os.Getenv("DEBUG") != ""
+	Port        = os.Getenv("PORT")
+	Debug       = os.Getenv("DEBUG") != ""
+	DatabaseURL = os.Getenv("DATABASE_URL")
 )
 
 //go:embed dashboard/dist
@@ -26,6 +28,9 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	db := setupDB(DatabaseURL)
+	defer db.Close()
+
 	addr := ":8080"
 	if Port != "" {
 		addr = ":" + Port
@@ -35,6 +40,9 @@ func main() {
 		Handler: loggerMiddleware(mux),
 		Addr:    addr,
 	}
+
+	requestAccessService := requestaccess.NewRequestAccessService(db)
+	requestAccessService.SetupRoutes(mux)
 
 	var apiHandler http.Handler
 	if Debug {

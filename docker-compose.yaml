@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_DB: tasafrica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
