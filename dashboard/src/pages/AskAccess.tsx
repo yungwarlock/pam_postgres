@@ -64,11 +64,12 @@ const AskAccess = (): React.ReactElement => {
     formik.setFieldValue(`permissions.${database}.${permission}`, !current);
   };
 
-  const handleNext = async () => {
+  const handleNext = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     await formik.validateForm();
-    formik.setTouched({ name: true, email: true });
     if (!formik.errors.name && !formik.errors.email && formik.values.name.trim() && formik.values.email.trim()) {
-      setStep(2);
+      setStep(step + 1);
     }
   };
 
@@ -82,7 +83,6 @@ const AskAccess = (): React.ReactElement => {
     <div className="flex flex-col justify-center items-center gap-6 p-6 rounded-lg bg-gray-50 border border-gray-200">
       <h2 className="text-2xl font-bold">Request Database Access</h2>
 
-      {/* Step Indicator */}
       <div className="w-full max-w-lg">
         <div className="w-full bg-gray-200 rounded-full h-3 relative shadow-inner overflow-hidden">
           <div
@@ -94,7 +94,6 @@ const AskAccess = (): React.ReactElement => {
       </div>
 
       <form onSubmit={formik.handleSubmit} className="w-full">
-        {/* Step 1: User Information */}
         {step === 1 && (
           <div className="flex flex-col gap-6 mb-8 w-2xl">
             <div className="flex flex-col w-full">
@@ -103,8 +102,8 @@ const AskAccess = (): React.ReactElement => {
                 name="name"
                 type="text"
                 value={formik.values.name}
-                onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
+                onChange={formik.handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter your name"
               />
@@ -130,7 +129,6 @@ const AskAccess = (): React.ReactElement => {
           </div>
         )}
 
-        {/* Step 2: Permissions Selection */}
         {step === 2 && (
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Select Required Permissions</h3>
@@ -168,7 +166,6 @@ const AskAccess = (): React.ReactElement => {
           </div>
         )}
 
-        {/* Step 3: Success */}
         {step === 3 && (
           <div className="flex flex-col items-center gap-6 py-12 text-center">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center shadow-lg">
@@ -230,5 +227,6 @@ const AskAccess = (): React.ReactElement => {
     </div>
   );
 };
+
 
 export default AskAccess;

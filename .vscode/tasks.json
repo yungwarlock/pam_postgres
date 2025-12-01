@@ -1,0 +1,78 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start backend",
+      "type": "shell",
+      "command": "go",
+      "args": [
+        "run",
+        "."
+      ],
+      "options": {
+        "env": {
+          "DEBUG": "true"
+        },
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "Start Frontend",
+      "type": "shell",
+      "command": "bun",
+      "args": [
+        "dev"
+      ],
+      "options": {
+        "cwd": "dashboard"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "Start App",
+      "dependsOn": [
+        "Start backend",
+        "Start Frontend"
+      ],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Start Services",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "up"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    }
+  ]
+}
