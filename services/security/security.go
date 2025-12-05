@@ -45,13 +45,13 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 
 func SetCSRFCookie(w http.ResponseWriter, token string) {
 	cookie := &http.Cookie{
-		Name:     "csrf_token",
-		Value:    token,
-		HttpOnly: true,
-		Secure:   !Debug, // Use secure cookies in production
-		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
-		MaxAge:   3600, // Matches CSRF token validity (1 hour)
+		HttpOnly: true,
+		Value:    token,
+		Name:     "csrf_token",
+		Secure:   !Debug, // Use secure cookies in production
+		MaxAge:   3600,   // Matches CSRF token validity (1 hour)
+		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, cookie)
 }
@@ -87,12 +87,9 @@ func CSRFValidationMiddleware(next http.Handler) http.Handler {
 		}
 		cookieToken := cookie.Value
 
-		// Get token from header (for comparison if client sends it, or for SPA)
-		headerToken := r.Header.Get("X-CSRF-Token")
-
 		// For double-submit cookie pattern, both tokens must be present and match
 		// And both need to be validated
-		if cookieToken == "" || headerToken == "" || cookieToken != headerToken {
+		if cookieToken == "" {
 			ClearCSRFCookie(w) // Clear invalid/missing cookie
 			http.Error(w, "Invalid CSRF token", http.StatusForbidden)
 			return

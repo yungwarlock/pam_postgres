@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 
 interface AccessRequest {
   id: string;
@@ -7,7 +7,7 @@ interface AccessRequest {
   email: string;
   permissions: Record<string, Record<string, boolean>>;
   created_at: string;
-  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  status: "pending" | "approved" | "rejected" | "expired";
   expiresAt?: string;
   approvedBy?: string;
   reason: string;
@@ -17,7 +17,7 @@ const ListAllAccessRequests: React.FC = () => {
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   useEffect(() => {
     fetchAccessRequests();
@@ -27,28 +27,60 @@ const ListAllAccessRequests: React.FC = () => {
     try {
       setLoading(true);
       // Replace with your actual API endpoint
-      const response = await fetch('/api/request-access');
-      if (!response.ok) throw new Error('Failed to fetch access requests');
+      const response = await fetch("/api/request-access");
+      if (!response.ok) throw new Error("Failed to fetch access requests");
       const data = await response.json();
       setRequests(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'expired': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const approveRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/request-access/${requestId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "approved" }),
+      });
+      if (!response.ok) throw new Error("Failed to approve request");
+      fetchAccessRequests();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "An error occurred");
     }
   };
 
-  const filteredRequests = filterStatus === 'all'
+  const rejectRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/request-access/${requestId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "rejected" }),
+      });
+      if (!response.ok) throw new Error("Failed to reject request");
+      fetchAccessRequests();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "An error occurred");
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "approved": return "bg-green-100 text-green-800";
+      case "rejected": return "bg-red-100 text-red-800";
+      case "pending": return "bg-yellow-100 text-yellow-800";
+      case "expired": return "bg-gray-100 text-gray-800";
+      default: return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const filteredRequests = filterStatus === "all"
     ? requests
     : requests.filter(req => req.status === filterStatus);
 
@@ -136,7 +168,7 @@ const ListAllAccessRequests: React.FC = () => {
                     {new Date(request.created_at).toLocaleString()}
                   </td>
                   <td className="px-6 py-4 w-1/5">
-                    <div className="text-sm text-gray-900">{Object.keys(request.permissions).join(', ')}</div>
+                    <div className="text-sm text-gray-900">{Object.keys(request.permissions).join(", ")}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(request.status)}`}>
@@ -148,12 +180,12 @@ const ListAllAccessRequests: React.FC = () => {
                     <button className="text-blue-600 hover:text-blue-900 mr-4">
                       View
                     </button>
-                    {request.status === 'pending' && (
+                    {request.status === "pending" && (
                       <>
-                        <button className="text-green-600 hover:text-green-900 mr-4">
+                        <button onClick={() => approveRequest(request.id)} className="text-green-600 hover:text-green-900 mr-4">
                           Approve
                         </button>
-                        <button className="text-red-600 hover:text-red-900">
+                        <button onClick={() => rejectRequest(request.id)} className="text-red-600 hover:text-red-900">
                           Reject
                         </button>
                       </>

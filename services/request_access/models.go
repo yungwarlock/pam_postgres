@@ -61,8 +61,8 @@ func (m *requestAccessModel) GetAllAccessRequests() (*[]AccessRequest, error) {
 	return &accessRequests, nil
 }
 
-func (m *requestAccessModel) UpdateAccessRequestStatus(requestID string, status string) error {
-	query := `UPDATE access_requests SET status = ? WHERE id = ?;`
+func (m *requestAccessModel) UpdateAccessRequestStatus(requestID string, status RequestStatus) error {
+	query := `UPDATE access_requests SET status = $1 WHERE id = $2;`
 	_, err := m.DB.Exec(query, status, requestID)
 	return err
 }

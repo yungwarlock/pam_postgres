@@ -56,11 +56,15 @@ func (s *RequestAccessService) CreateAccessRequest(w http.ResponseWriter, r *htt
 func (s *RequestAccessService) UpdateAccessRequestStatus(w http.ResponseWriter, r *http.Request) {
 	requestID := r.PathValue("requestID")
 	var statusUpdate struct {
-		Status string `json:"status"`
+		Status RequestStatus `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&statusUpdate); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid request payload: %v", err), http.StatusBadRequest)
 		return
+	}
+
+	if statusUpdate.Status == StatusApproved {
+		approveAccessRequest()
 	}
 
 	if err := s.model.UpdateAccessRequestStatus(requestID, statusUpdate.Status); err != nil {
