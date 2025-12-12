@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Minimal dependency installer for this project:
+# - Checks for: node, npm, go, git
+# - Installs missing packages via detected package manager (apt, dnf, yum, pacman, brew)
+# - Runs npm install and/or go mod download if project files exist
+# - Prints success or helpful error messages
+
+REQUIRED_CMDS=(bun go git)
+
+info() { printf "\e[1;34m[INFO]\e[0m %s\n" "$*"; }
+ok()   { printf "\e[1;32m[OK]\e[0m %s\n" "$*"; }
+err()  { printf "\e[1;31m[ERROR]\e[0m %s\n" "$*" >&2; }
+
+detect_pkg_mgr() {
+	# returns one of: apt dnf yum pacman brew unknown
+	if command -v apt-get >/dev/null 2>&1; then
+		echo "apt"
+	elif command -v dnf >/dev/null 2>&1; then
+		echo "dnf"
+	elif command -v yum >/dev/null 2>&1; then
+		echo "yum"
+	elif command -v pacman >/dev/null 2>&1; then
+		echo "pacman"
+	elif command -v brew >/dev/null 2>&1; then
+		echo "brew"
+	else
+		echo "unknown"
+	fi
+}
+
+PKG_MGR="$(detect_pkg_mgr)"
+if [ "$PKG_MGR" = "unknown" ]; then
+	err "No supported package manager found (apt/dnf/yum/pacman/brew). Please install dependencies manually."
+	exit 1
+fi
+
+# Map commands -> package names per manager
+map_pkg() {
+	local mgr=$1 cmd=$2
+	case "$mgr" in
+		apt)
+			case "$cmd" in
+				bun) echo "bun";;          # bun may not be in apt repos; fallback handled later
+				go)  echo "golang-go";;
+				git) echo "git";;
+				*)   echo "$cmd";;
+			esac
+			;;
+		dnf|yum)
+			case "$cmd" in
+				bun) echo "bun";;
+				go)  echo "golang";;
+				git) echo "git";;
+				*)   echo "$cmd";;
+			esac
+			;;
+		pacman)
+			case "$cmd" in
+				bun) echo "bun";;
+				go)  echo "go";;
+				git) echo "git";;
+				*)   echo "$cmd";;
+			esac
+			;;
+		brew)
+			case "$cmd" in
+				bun) echo "bun";;
+				go)  echo "go";;
+				git) echo "git";;
+				*)   echo "$cmd";;
+			esac
+			;;
+		*) echo "$cmd";;
+	esac
+}
+
+missing_cmds=()
+for c in "${REQUIRED_CMDS[@]}"; do
+	if ! command -v "$c" >/dev/null 2>&1; then
+		missing_cmds+=("$c")
+	fi
+done
+
+if [ "${#missing_cmds[@]}" -eq 0 ]; then
+	ok "All required commands are already installed."
+else
+	info "Detected package manager: $PKG_MGR"
+	info "Missing commands: ${missing_cmds[*]}"
+	install_pkgs=()
+	for c in "${missing_cmds[@]}"; do
+		pkg="$(map_pkg "$PKG_MGR" "$c")"
+		# Avoid duplicates
+		if [[ ! " ${install_pkgs[*]} " =~ " $pkg " ]]; then
+			install_pkgs+=("$pkg")
+		fi
+	done
+
+	info "Packages to install: ${install_pkgs[*]}"
+	# Confirm and run install
+	if [ "$PKG_MGR" = "apt" ]; then
+		sudo apt-get update
+		sudo apt-get install -y "${install_pkgs[@]}"
+	elif [ "$PKG_MGR" = "dnf" ]; then
+		sudo dnf install -y "${install_pkgs[@]}"
+	elif [ "$PKG_MGR" = "yum" ]; then
+		sudo yum install -y "${install_pkgs[@]}"
+	elif [ "$PKG_MGR" = "pacman" ]; then
+		sudo pacman -Sy --noconfirm "${install_pkgs[@]}"
+	elif [ "$PKG_MGR" = "brew" ]; then
+		for p in "${install_pkgs[@]}"; do
+			brew install "$p"
+		done
+	else
+		err "Unsupported package manager: $PKG_MGR"
+		exit 1
+	fi
+
+	# If bun was requested but not installable via system package manager, use official installer
+	if [[ " ${install_pkgs[*]} " =~ " bun " ]] && ! command -v bun >/dev/null 2>&1; then
+		info "Attempting to install bun via official installer (https://bun.sh)"
+		if command -v curl >/dev/null 2>&1; then
+			curl -fsSL https://bun.sh/install | bash || true
+			# Ensure $HOME/.bun is in PATH for the remainder of this script (user installer default)
+			if [ -d "${HOME}/.bun/bin" ]; then
+				export PATH="${HOME}/.bun/bin:${PATH}"
+			fi
+		else
+			err "curl is required to run bun installer; please install curl or bun manually."
+		fi
+	fi
+
+	# Re-check installed commands
+	failed=()
+	for c in "${missing_cmds[@]}"; do
+		if ! command -v "$c" >/dev/null 2>&1; then
+			failed+=("$c")
+		fi
+	done
+
+	if [ "${#failed[@]}" -ne 0 ]; then
+		err "The following commands are still missing after attempted install: ${failed[*]}"
+		err "Please install them manually and re-run this script."
+		exit 2
+	else
+		ok "System packages installed successfully."
+	fi
+fi
+
+# Project-specific installs
+if [ -f dashboard/package.json ]; then
+	info "dashboard/package.json found — running bun install in dashboard/"
+	if command -v bun >/dev/null 2>&1; then
+		( cd dashboard && bun install )
+		ok "bun install completed in dashboard/."
+	else
+		err "bun not available; skipped bun install in dashboard/."
+	fi
+fi
+
+if [ -f go.mod ]; then
+	info "go.mod found — running go mod download"
+	if command -v go >/dev/null 2>&1; then
+		go mod download
+		ok "go modules downloaded."
+	else
+		err "go not available; skipped go mod download."
+	fi
+fi
+
+ok "All checks and installs completed successfully."
