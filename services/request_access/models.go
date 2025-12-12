@@ -6,11 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/netip"
-	dbnet "pam_postgres/services/db_net"
-	"time"
-
-	"github.com/docker/docker/libnetwork/etchosts"
+	dbmanager "pam_postgres/services/db_manager"
 )
 
 type RequestAccessModel struct {
@@ -44,6 +40,7 @@ func (m *RequestAccessModel) InitDB() error {
 		email TEXT NOT NULL,
 		reason TEXT NOT NULL,
 		status TEXT NOT NULL,
+		auth_details JSONB,
 		permissions JSONB NOT NULL,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -63,18 +60,31 @@ func setupDB(url string) *sql.DB {
 
 func (m *RequestAccessModel) CreateAccessRequest(ctx context.Context, ar *AccessRequest) error {
 	query := `
-	INSERT INTO access_requests (name, email, reason, status, permissions)
-	VALUES ($1, $2, $3, $4, $5);`
+	INSERT INTO access_requests (name, email, reason, status, auth_details, permissions)
+	VALUES ($1, $2, $3, $4, $5, $6)
+	RETURNING id;`
+	authDetailsJSON, err := json.Marshal(ar.AuthDetails)
+	if err != nil {
+		return fmt.Errorf("failed to marshal auth details: %v", err)
+	}
 	permissionsJSON, err := json.Marshal(ar.Permissions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal permissions: %v", err)
 	}
-	_, err = m.DB.ExecContext(ctx, query, ar.Name, ar.Email, ar.Reason, ar.Status, string(permissionsJSON))
-	return err
+
+	var lastInsertedID int
+	err = m.DB.QueryRowContext(ctx, query, ar.Name, ar.Email, ar.Reason, ar.Status, string(authDetailsJSON), string(permissionsJSON)).Scan(&lastInsertedID)
+	if err != nil {
+		log.Fatalf("Error inserting access request: %v", err)
+		return fmt.Errorf("failed to insert access request: %v", err)
+	}
+
+	ar.ID = lastInsertedID
+	return nil
 }
 
 func (m *RequestAccessModel) GetAllAccessRequests(ctx context.Context) (*[]AccessRequest, error) {
-	query := `SELECT id, name, email, reason, status, permissions, created_at, updated_at FROM access_requests;`
+	query := `SELECT id, name, email, reason, status, auth_details, permissions, created_at, updated_at FROM access_requests;`
 	rows, err := m.DB.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query access requests: %v", err)
@@ -84,9 +94,13 @@ func (m *RequestAccessModel) GetAllAccessRequests(ctx context.Context) (*[]Acces
 	var accessRequests []AccessRequest
 	for rows.Next() {
 		var ar AccessRequest
+		var authDetailsJSON string
 		var permissionsJSON string
-		if err := rows.Scan(&ar.ID, &ar.Name, &ar.Email, &ar.Reason, &ar.Status, &permissionsJSON, &ar.CreatedAt, &ar.UpdatedAt); err != nil {
+		if err := rows.Scan(&ar.ID, &ar.Name, &ar.Email, &ar.Reason, &ar.Status, &authDetailsJSON, &permissionsJSON, &ar.CreatedAt, &ar.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan access request: %v", err)
+		}
+		if err := json.Unmarshal([]byte(authDetailsJSON), &ar.AuthDetails); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal auth details: %v", err)
 		}
 		if err := json.Unmarshal([]byte(permissionsJSON), &ar.Permissions); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal permissions: %v", err)
@@ -97,13 +111,17 @@ func (m *RequestAccessModel) GetAllAccessRequests(ctx context.Context) (*[]Acces
 }
 
 func (m *RequestAccessModel) GetAccessRequestByID(ctx context.Context, requestID string) (*AccessRequest, error) {
-	query := `SELECT id, name, email, reason, status, permissions, created_at, updated_at FROM access_requests WHERE id = $1;`
+	query := `SELECT id, name, email, reason, status, auth_details, permissions,  created_at, updated_at FROM access_requests WHERE id = $1;`
 	row := m.DB.QueryRowContext(ctx, query, requestID)
 
 	var ar AccessRequest
+	var authDetailsJSON string
 	var permissionsJSON string
-	if err := row.Scan(&ar.ID, &ar.Name, &ar.Email, &ar.Reason, &ar.Status, &permissionsJSON, &ar.CreatedAt, &ar.UpdatedAt); err != nil {
+	if err := row.Scan(&ar.ID, &ar.Name, &ar.Email, &ar.Reason, &ar.Status, &authDetailsJSON, &permissionsJSON, &ar.CreatedAt, &ar.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to scan access request: %v", err)
+	}
+	if err := json.Unmarshal([]byte(authDetailsJSON), &ar.AuthDetails); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal auth details: %v", err)
 	}
 	if err := json.Unmarshal([]byte(permissionsJSON), &ar.Permissions); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal permissions: %v", err)
@@ -114,6 +132,16 @@ func (m *RequestAccessModel) GetAccessRequestByID(ctx context.Context, requestID
 func (m *RequestAccessModel) UpdateAccessRequestStatus(ctx context.Context, requestID string, status RequestStatus) error {
 	query := `UPDATE access_requests SET status = $1 WHERE id = $2;`
 	_, err := m.DB.ExecContext(ctx, query, status, requestID)
+	return err
+}
+
+func (m *RequestAccessModel) UpdateAccessRequestWithTempUser(ctx context.Context, requestID string, tempUserAuth *dbmanager.PostgresAuthDetails) error {
+	query := `UPDATE access_requests SET auth_details = $1 WHERE id = $2;`
+	authDetailsJSON, err := json.Marshal(tempUserAuth)
+	if err != nil {
+		return fmt.Errorf("failed to marshal auth details: %v", err)
+	}
+	_, err = m.DB.ExecContext(ctx, query, string(authDetailsJSON), requestID)
 	return err
 }
 
@@ -182,70 +210,4 @@ func (m *RequestAccessModel) GetAllTablesFromAllDatabases(ctx context.Context) (
 	}
 
 	return databaseTables, nil
-}
-
-func (m *RequestAccessModel) approveAccessRequest(ctx context.Context, db *sql.DB, permissionSet *PermissionSet) (string, string, string) {
-	timeout := 40 * time.Second
-
-	name, port, fullName := dbnet.GenerateSubdomainAndPort()
-	username, password, err := createTempUser(ctx, db, timeout)
-	if err != nil {
-		panic(err)
-	}
-
-	err = m.grantPermissions(ctx, username, permissionSet)
-
-	if err != nil {
-		panic(err)
-	}
-
-	if Debug {
-		fmt.Printf("Debug: Generated subdomain %s and port %s\n", fullName, port)
-		err := etchosts.Add("/etc/hosts", []etchosts.Record{{
-			Hosts: fullName,
-			IP:    netip.MustParseAddr("127.0.0.1"),
-		}})
-
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	go dbnet.CreateConnection(name, port, timeout)
-	fmt.Printf("Access approved. Connect to %s on port %s\n", fullName, port)
-	fmt.Printf("Login with username: %s and password: %s\n", username, password)
-	return username, password, fullName
-}
-
-func (m *RequestAccessModel) grantPermissions(ctx context.Context, userName string, permissionSet *PermissionSet) error {
-	for database, dbPermissions := range *permissionSet {
-		dbStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", m.rootUser, m.rootPassword, m.host, m.port, database)
-		db, err := sql.Open("pgx", dbStr)
-		if err != nil {
-			return fmt.Errorf("failed to connect to database %s: %v", database, err)
-		}
-
-		defer db.Close()
-
-		for table, tablePermissions := range dbPermissions {
-			permissionsStr := ""
-			for permission, allowed := range tablePermissions {
-				if checkPermissionAllowed(permission) && allowed {
-					permissionsStr += permission + ", "
-				}
-			}
-
-			if len(permissionsStr) > 0 {
-				// Remove trailing comma and space
-				permissionsStr = permissionsStr[:len(permissionsStr)-2]
-				grantQuery := "GRANT " + permissionsStr + " ON TABLE " + table + " TO " + userName + ";"
-				_, err := db.ExecContext(ctx, grantQuery)
-				if err != nil {
-					return fmt.Errorf("failed to grant permissions on table %s in database %s: %v", table, database, err)
-				}
-			}
-
-		}
-	}
-	return nil
 }

@@ -1,4 +1,4 @@
-package dbnet
+package dbmanager
 
 import (
 	"context"

@@ -3,11 +3,15 @@ import React, { useState } from "react";
 import * as Yup from "yup";
 import { useFormik } from "formik";
 
+import { useNavigate } from "react-router";
+
 import type { Databases, PermissionSet } from "../types";
 
 
 const AskAccess = (): React.ReactElement => {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
+
   const [expandedDatabases, setExpandedDatabases] = useState<Record<string, boolean>>({});
 
   const [databases, setDatabases] = useState<Databases>({});
@@ -68,7 +72,9 @@ const AskAccess = (): React.ReactElement => {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        setStep(3);
+        const data = await response.json();
+
+        navigate(`/ask-access/${data.id}`);
       } catch (error) {
         console.error("Submission error:", error);
         alert("Failed to submit request. Please try again.");
@@ -216,7 +222,7 @@ const AskAccess = (): React.ReactElement => {
           </div>
         )}
 
-        {step === 3 && (
+        {/* {step === 3 && (
           <div className="flex flex-col items-center gap-6 py-12 text-center">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center shadow-lg">
               <svg className="w-12 h-12 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -240,7 +246,7 @@ const AskAccess = (): React.ReactElement => {
               Submit New Request
             </button>
           </div>
-        )}
+        )} */}
 
         {/* Navigation Buttons */}
         {step < 3 && (

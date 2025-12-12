@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router";
 
 import Home from "./pages/Home";
 import AskAccess from "./pages/AskAccess";
+import WaitForApproval from "./pages/WaitForApproval";
 import ListAllAccessRequests from "./pages/ListAllAccessRequests";
 
 
@@ -12,6 +13,7 @@ const AppRouter = () => {
       <Route path="/" element={<Home />} />
       <Route path="/ask-access" element={<AskAccess />} />
       <Route path="/admin" element={<ListAllAccessRequests />} />
+      <Route path="/ask-access/:requestID" element={<WaitForApproval />} />
       <Route path="*" element={<div>404 Not Found</div>} />
     </Routes>
   );

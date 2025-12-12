@@ -1,4 +1,4 @@
-package requestaccess
+package dbmanager
 
 import (
 	"context"
@@ -36,24 +36,10 @@ func revokeTempUser(ctx context.Context, db *sql.DB, username string) error {
 	return nil
 }
 
-// func grantPermissions(ctx context.Context, db *sql.DB, username string, permissionSet PermissionSet) error {
-// 	permissions := convertPermissionSetToSQL(username, permissionSet)
-// 	for _, perm := range *permissions {
-// 		_, err := db.ExecContext(ctx, perm)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	return nil
-// }
-
 func generateTempUsername() string {
 	// Generate 8 random bytes and encode as hex
 	bytes := make([]byte, 8)
 	rand.Read(bytes)
-
-	fmt.Println("temp_" + hex.EncodeToString(bytes))
 
 	return "temp_" + hex.EncodeToString(bytes)
 }
@@ -64,18 +50,15 @@ func generateTempPassword() string {
 		lowercase = "abcdefghijklmnopqrstuvwxyz"
 		uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		digits    = "0123456789"
-		special   = "!@#$%^&*"
 	)
 
-	charset := lowercase + uppercase + digits + special
+	charset := lowercase + uppercase + digits
 	password := make([]byte, 16)
 
 	for i := range password {
 		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		password[i] = charset[num.Int64()]
 	}
-
-	fmt.Println(password)
 
 	return string(password)
 }
