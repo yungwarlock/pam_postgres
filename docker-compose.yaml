@@ -2,8 +2,8 @@ services:
   postgres:
     image: postgres
     environment:
-      POSTGRES_DB: tasafrica
       POSTGRES_USER: postgres
+      POSTGRES_DB: pam_postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"

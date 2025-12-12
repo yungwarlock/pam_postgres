@@ -15,8 +15,12 @@ import (
 
 var (
 	Port        = os.Getenv("PORT")
+	dbHost      = os.Getenv("DB_HOST")
+	dbPort      = os.Getenv("DB_PORT")
 	Debug       = os.Getenv("DEBUG") != ""
-	DatabaseURL = os.Getenv("DATABASE_URL")
+	rootUser    = os.Getenv("DB_ROOT_USER")
+	rootPass    = os.Getenv("DB_ROOT_PASSWORD")
+	dbAdminName = os.Getenv("DB_ADMIN_DATABASE")
 )
 
 func init() {
@@ -27,7 +31,6 @@ func init() {
 
 	Port = os.Getenv("PORT")
 	Debug = os.Getenv("DEBUG") != ""
-	DatabaseURL = os.Getenv("DATABASE_URL")
 }
 
 //go:embed dashboard/dist
@@ -41,9 +44,6 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	db := setupDB(DatabaseURL)
-	defer db.Close()
-
 	addr := ":8080"
 	if Port != "" {
 		addr = ":" + Port
@@ -54,7 +54,18 @@ func main() {
 		Addr:    addr,
 	}
 
-	requestAccessService := requestaccess.NewRequestAccessService(db)
+	model := requestaccess.NewRequestAccessModel(
+		rootUser,
+		rootPass,
+		dbHost,
+		dbPort,
+		dbAdminName,
+	)
+	if model == nil {
+		log.Fatal("Failed to create RequestAccessModel")
+	}
+
+	requestAccessService := requestaccess.NewRequestAccessService(model)
 	requestAccessService.SetupRoutes(mux)
 
 	var apiHandler http.Handler
@@ -65,11 +76,9 @@ func main() {
 	}
 
 	mux.Handle("/api/", http.StripPrefix("/api", apiHandler))
-	// Handle dashboard - register both patterns
 	dashboardHandler := security.CSRFMiddleware(reactFileServer(dashboardApp))
-	// mux.Handle("/", http.StripPrefix("/dashboard", dashboardHandler))
 	mux.Handle("/", dashboardHandler)
 
-	log.Printf("Starting Simplipay server on %s", addr)
+	log.Printf("Starting pam_postgres on %s", addr)
 	srv.ListenAndServe()
 }

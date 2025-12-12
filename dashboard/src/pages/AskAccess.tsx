@@ -3,23 +3,42 @@ import React, { useState } from "react";
 import * as Yup from "yup";
 import { useFormik } from "formik";
 
-interface PermissionState {
-  [database: string]: {
-    [permission: string]: boolean;
-  };
-}
+import type { Databases, PermissionSet } from "../types";
+
 
 const AskAccess = (): React.ReactElement => {
   const [step, setStep] = useState(1);
+  const [expandedDatabases, setExpandedDatabases] = useState<Record<string, boolean>>({});
 
-  const databases = ["users_db", "products_db", "orders_db", "analytics_db"];
+  const [databases, setDatabases] = useState<Databases>({});
   const permissionTypes = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
 
-  const initialPermissions: PermissionState = {};
-  databases.forEach((db) => {
-    initialPermissions[db] = {};
-    permissionTypes.forEach((perm) => {
-      initialPermissions[db][perm] = false;
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch("/api/databases");
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        setDatabases(data);
+      } catch (error) {
+        console.error("Error fetching databases:", error);
+      }
+    })();
+  }, []);
+
+  const initialPermissions: PermissionSet = {};
+  Object.entries(databases).forEach(([db, tables]) => {
+    if (!initialPermissions[db]) {
+      initialPermissions[db] = {};
+    }
+
+    tables.forEach((table) => {
+      initialPermissions[db][table] = {};
+      permissionTypes.forEach((perm) => {
+        initialPermissions[db][table][perm] = false;
+      });
     });
   });
 
@@ -31,7 +50,7 @@ const AskAccess = (): React.ReactElement => {
   const formik = useFormik<{
     name: string;
     email: string;
-    permissions: PermissionState;
+    permissions: PermissionSet;
   }>({
     initialValues: {
       name: "",
@@ -59,9 +78,16 @@ const AskAccess = (): React.ReactElement => {
     },
   });
 
-  const handlePermissionChange = (database: string, permission: string) => {
-    const current = formik.values.permissions[database]?.[permission] || false;
-    formik.setFieldValue(`permissions.${database}.${permission}`, !current);
+  const handlePermissionChange = (database: string, table: string, permission: string) => {
+    const current = formik.values.permissions[database]?.[table]?.[permission] || false;
+    formik.setFieldValue(`permissions.${database}.${table}.${permission}`, !current);
+  };
+
+  const toggleDatabase = (database: string) => {
+    setExpandedDatabases(prev => ({
+      ...prev,
+      [database]: !prev[database]
+    }));
   };
 
   const handleNext = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -86,9 +112,8 @@ const AskAccess = (): React.ReactElement => {
       <div className="w-full max-w-lg">
         <div className="w-full bg-gray-200 rounded-full h-3 relative shadow-inner overflow-hidden">
           <div
-            className={`absolute inset-0 h-3 bg-green-500 rounded-full shadow-lg transition-all duration-1000 ease-out transform origin-left ${
-              step === 1 ? "scale-x-50" : "scale-x-100"
-            }`}
+            className={`absolute inset-0 h-3 bg-green-500 rounded-full shadow-lg transition-all duration-1000 ease-out transform origin-left ${step === 1 ? "scale-x-50" : "scale-x-100"
+              }`}
           />
         </div>
       </div>
@@ -136,7 +161,7 @@ const AskAccess = (): React.ReactElement => {
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold">Database</th>
+                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold">Database / Table</th>
                     {permissionTypes.map((perm) => (
                       <th key={perm} className="border border-gray-300 px-4 py-2 text-center font-semibold">
                         {perm}
@@ -145,20 +170,45 @@ const AskAccess = (): React.ReactElement => {
                   </tr>
                 </thead>
                 <tbody>
-                  {databases.map((db) => (
-                    <tr key={db} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-2 font-medium">{db}</td>
-                      {permissionTypes.map((perm) => (
-                        <td key={`${db}-${perm}`} className="border border-gray-300 px-4 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={formik.values.permissions[db]?.[perm] || false}
-                            onChange={() => handlePermissionChange(db, perm)}
-                            className="w-4 h-4 cursor-pointer"
-                          />
+                  {Object.entries(databases).map(([db, tables]) => (
+                    <React.Fragment key={db}>
+                      <tr className="bg-gray-50 hover:bg-gray-100">
+                        <td className="border border-gray-300 px-4 py-2 font-bold">
+                          <button
+                            type="button"
+                            onClick={() => toggleDatabase(db)}
+                            className="flex items-center gap-2 text-left w-full hover:text-blue-600"
+                          >
+                            <span className="text-sm">
+                              {expandedDatabases[db] ? '▼' : '▶'}
+                            </span>
+                            {db}
+                          </button>
                         </td>
+                        {permissionTypes.map((perm) => (
+                          <td key={`${db}-${perm}`} className="border border-gray-300 px-4 py-2 text-center bg-gray-100">
+                            {/* No checkboxes at database level */}
+                          </td>
+                        ))}
+                      </tr>
+                      {expandedDatabases[db] && tables.map((table) => (
+                        <tr key={`${db}-${table}`} className="hover:bg-gray-50">
+                          <td className="border border-gray-300 px-8 py-2 text-sm text-gray-700">
+                            {table}
+                          </td>
+                          {permissionTypes.map((perm) => (
+                            <td key={`${db}-${table}-${perm}`} className="border border-gray-300 px-4 py-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={formik.values.permissions[db]?.[table]?.[perm] || false}
+                                onChange={() => handlePermissionChange(db, table, perm)}
+                                className="w-4 h-4 cursor-pointer"
+                              />
+                            </td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

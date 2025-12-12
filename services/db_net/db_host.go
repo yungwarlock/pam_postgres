@@ -10,14 +10,22 @@ import (
 )
 
 var (
-	dbPort  = os.Getenv("DB_PORT")
-	dbHost  = os.Getenv("DB_HOSTNAME")
-	appHost = os.Getenv("APP_HOSTNAME")
+	dbPort  string
+	dbHost  string
+	appHost string
 )
+
+func init() {
+	dbPort = os.Getenv("DB_PORT")
+	dbHost = os.Getenv("DB_HOST")
+	appHost = os.Getenv("APP_HOSTNAME")
+
+	fmt.Println(dbHost, dbPort, appHost)
+}
 
 var connections = make(map[string]net.Listener)
 
-func CreateConnection(subdomain, port string) error {
+func CreateConnection(subdomain, port string, timeout time.Duration) error {
 	if _, exists := connections[subdomain]; exists {
 		return fmt.Errorf("Connection already exists")
 	}
@@ -46,7 +54,7 @@ func CreateConnection(subdomain, port string) error {
 		domain := subdomain + "." + appHost
 		clientHost, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
 		log.Printf("New connection from %s to %s\n", clientHost, domain)
-		go handleConnection(clientConn, 5*time.Minute, closeChan)
+		go handleConnection(clientConn, timeout, closeChan)
 	}
 }
 
@@ -62,7 +70,10 @@ func handleConnection(client net.Conn, duration time.Duration, closeChan chan bo
 		Conn:   targetConn,
 	}
 
-	defer client.Close()
+	defer func() {
+		fmt.Println("Closing client")
+		client.Close()
+	}()
 
 	timer := time.AfterFunc(duration, func() {
 		log.Println("Time limit reached! Killing connection.")
