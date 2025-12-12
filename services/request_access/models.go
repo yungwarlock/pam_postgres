@@ -185,7 +185,7 @@ func (m *RequestAccessModel) GetAllTablesFromAllDatabases(ctx context.Context) (
 }
 
 func (m *RequestAccessModel) approveAccessRequest(ctx context.Context, db *sql.DB, permissionSet *PermissionSet) (string, string, string) {
-	timeout := 50 * time.Second
+	timeout := 40 * time.Second
 
 	name, port, fullName := dbnet.GenerateSubdomainAndPort()
 	username, password, err := createTempUser(ctx, db, timeout)

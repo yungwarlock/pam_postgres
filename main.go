@@ -50,8 +50,8 @@ func main() {
 	}
 
 	srv := http.Server{
-		Handler: loggerMiddleware(mux),
 		Addr:    addr,
+		Handler: loggerMiddleware(mux),
 	}
 
 	model := requestaccess.NewRequestAccessModel(

@@ -1,11 +1,13 @@
 package dbnet
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -23,66 +25,124 @@ func init() {
 	fmt.Println(dbHost, dbPort, appHost)
 }
 
-var connections = make(map[string]net.Listener)
+type ConnectionManager struct {
+	listener net.Listener
+	mutex    sync.RWMutex
+	ctx      context.Context
+	clients  map[net.Conn]bool
+	cancel   context.CancelFunc
+}
+
+var connections = make(map[string]*ConnectionManager)
 
 func CreateConnection(subdomain, port string, timeout time.Duration) error {
 	if _, exists := connections[subdomain]; exists {
 		return fmt.Errorf("Connection already exists")
 	}
 
-	// start listening on the specified port
 	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		return err
 	}
 
-	connections[subdomain] = listener
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	manager := &ConnectionManager{
+		ctx:      ctx,
+		cancel:   cancel,
+		listener: listener,
+		clients:  make(map[net.Conn]bool),
+	}
+
+	connections[subdomain] = manager
 	log.Printf("Listening on port %s for subdomain %s\n", port, subdomain)
 
-	var closeChan = make(chan bool)
-
 	go func() {
-		<-closeChan
+		<-ctx.Done()
+		log.Printf("Time limit reached! Killing connection for subdomain %s\n", subdomain)
+
+		manager.mutex.Lock()
+		for client := range manager.clients {
+			client.Close()
+		}
+		manager.mutex.Unlock()
+
 		listener.Close()
 		delete(connections, subdomain)
-		log.Printf("Closed connection for subdomain %s\n", subdomain)
 	}()
 
 	for {
-		clientConn, _ := listener.Accept()
+		clientConn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Stopping listener for subdomain %s: %v\n", subdomain, err)
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			clientConn.Close()
+			return nil
+		default:
+		}
 
 		domain := subdomain + "." + appHost
 		clientHost, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
 		log.Printf("New connection from %s to %s\n", clientHost, domain)
-		go handleConnection(clientConn, timeout, closeChan)
+
+		manager.mutex.Lock()
+		manager.clients[clientConn] = true
+		manager.mutex.Unlock()
+
+		go manager.handleConnection(clientConn, subdomain)
 	}
 }
 
-func handleConnection(client net.Conn, duration time.Duration, closeChan chan bool) {
+func (cm *ConnectionManager) handleConnection(client net.Conn, subdomain string) {
+	defer func() {
+		cm.mutex.Lock()
+		delete(cm.clients, client)
+		cm.mutex.Unlock()
+		client.Close()
+	}()
+
 	targetConn, err := net.Dial("tcp", dbHost+":"+dbPort)
 	if err != nil {
-		client.Close()
+		log.Printf("Failed to connect to database: %v", err)
 		return
 	}
+	defer targetConn.Close()
 
 	targetConn = &loggingConn{
 		logger: os.Stdout,
 		Conn:   targetConn,
 	}
 
-	defer func() {
-		fmt.Println("Closing client")
-		client.Close()
-	}()
+	ctx, cancel := context.WithCancel(cm.ctx)
+	defer cancel()
 
-	timer := time.AfterFunc(duration, func() {
-		log.Println("Time limit reached! Killing connection.")
+	go func() {
+		<-ctx.Done()
+		log.Println("Closing connections due to timeout")
 		client.Close()
 		targetConn.Close()
-		closeChan <- true
-	})
-	defer timer.Stop()
+	}()
 
-	go io.Copy(targetConn, client)
-	io.Copy(client, targetConn)
+	done := make(chan error, 2)
+
+	go func() {
+		_, err := io.Copy(targetConn, client)
+		done <- err
+	}()
+
+	go func() {
+		_, err := io.Copy(client, targetConn)
+		done <- err
+	}()
+
+	select {
+	case <-done:
+		log.Printf("Connection closed for subdomain %s", subdomain)
+	case <-ctx.Done():
+		log.Printf("Connection terminated due to timeout for subdomain %s", subdomain)
+	}
 }
