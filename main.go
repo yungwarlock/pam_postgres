@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/joho/godotenv"
-
 	requestaccess "pam_postgres/services/request_access"
 	"pam_postgres/services/security"
 )
@@ -22,16 +20,6 @@ var (
 	rootPass    = os.Getenv("DB_ROOT_PASSWORD")
 	dbAdminName = os.Getenv("DB_ADMIN_DATABASE")
 )
-
-func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
-	Port = os.Getenv("PORT")
-	Debug = os.Getenv("DEBUG") != ""
-}
 
 //go:embed dashboard/dist
 var dashboardFiles embed.FS

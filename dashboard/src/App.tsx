@@ -4,7 +4,7 @@ import AppRouter from "./router";
 
 const App = (): React.ReactElement => {
   return (
-    <div className="flex flex-col justify-center items-center w-screen overflow-x-hidden min-h-screen bg-gray-100">
+    <div className="flex flex-col">
       <AppRouter />
     </div>
   );
